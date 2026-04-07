@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>D-TRACKER PRO DASH</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Rajdhani:wght@500;700&display=swap');
+
+        :root {
+            --primary: #00ff88; /* Neon Green */
+            --bg: #030303;
+            --box-bg: #0a0a0a;
+            --border: #1a1a1a;
+            --text-muted: #666;
+            --danger: #ff3131;
+            --warn: #ffaa00;
+            --beam: #0066ff;
+        }
+
+        body { margin: 0; background: var(--bg); color: white; font-family: 'Rajdhani', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+        
+        .dashboard { width: 850px; height: 480px; position: relative; background: var(--box-bg); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); padding: 10px; box-sizing: border-box; }
+
+        /* Bluetooth & Header */
+        header { position: absolute; top: 15px; left: 20px; right: 20px; display: flex; justify-content: space-between; align-items: center; z-index: 100; }
+        #ble-icon { font-size: 26px; cursor: pointer; color: #1a1a1a; transition: 0.3s; text-shadow: 0 0 5px rgba(255,255,255,0.1); }
+        #ble-icon.connected { color: var(--primary); filter: drop-shadow(0 0 10px var(--primary)); }
+        #ble-icon.error { color: var(--danger); }
+        .title { font-size: 14px; color: var(--text-muted); letter-spacing: 2px; text-transform: uppercase; font-weight: bold; }
+
+        /* RPM Arch (Top) */
+        .rpm-bar { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+        #rpm-svg { width: 100%; height: 100%; }
+        .rpm-bg { fill: none; stroke: #111; stroke-width: 10; stroke-linecap: round; }
+        .rpm-fill { fill: none; stroke: var(--primary); stroke-width: 12; stroke-linecap: round; stroke-dasharray: 1000; stroke-dashoffset: 1000; transition: 0.1s linear; filter: drop-shadow(0 0 8px var(--primary)); }
+
+        /* Split Signals (Modern) */
+        .sig { position: absolute; top: 130px; font-size: 50px; color: #080808; transition: 0.2s; z-index: 10; }
+        #sig-l { left: 40px; }
+        #sig-r { right: 40px; }
+        .sig-on { color: var(--primary); text-shadow: 0 0 20px var(--primary); animation: blink 0.6s infinite; }
+
+        @keyframes blink { 50% { opacity: 0.2; } }
+
+        /* Center Display */
+        .center-ui { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 5; }
+        .speed-val { font-size: 180px; font-weight: 800; font-family: 'Orbitron'; line-height: 0.8; margin-bottom: -10px; }
+        .unit { font-size: 18px; color: var(--text-muted); letter-spacing: 4px; text-transform: uppercase; }
+
+        /* Gear */
+        .gear-box { position: absolute; top: 80px; right: 100px; padding: 10px 30px; background: rgba(0,0,0,0.5); border-radius: 12px; border: 1px solid var(--border); z-index: 5; }
+        .gear-val { font-size: 100px; font-weight: 800; color: var(--primary); font-family: 'Orbitron'; line-height: 1; filter: drop-shadow(0 0 10px var(--primary)); }
+
+        /* Central Icons */
+        .icons-bar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 45px; font-size: 26px; color: #080808; z-index: 10; padding: 5px 20px; background: rgba(0,0,0,0.3); border-radius: 20px; }
+        .active-beam { color: var(--beam); text-shadow: 0 0 10px var(--beam); }
+        .active-stand { color: var(--warn); text-shadow: 0 0 10px var(--warn); }
+        .active-fan { color: #00f3ff; animation: blink 1s infinite; }
+
+        /* Bottom Row Stats */
+        .bottom-bar { position: absolute; bottom: 30px; width: 92%; left: 4%; display: flex; justify-content: space-between; align-items: flex-end; z-index: 10; padding-top: 15px; border-top: 1px solid var(--border); }
+        .stat { text-align: left; }
+        .stat.trip-reset { cursor: pointer; }
+        .val { font-size: 30px; font-weight: bold; color: white; display: block; font-family: 'Rajdhani'; line-height: 1.1; }
+        .lbl { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px; }
+
+        /* Mobile specific adjustments (Portrait warning) */
+        @media (orientation: portrait) {
+            .dashboard { display: none; }
+            body::before { content: "Please rotate your device to landscape."; font-size: 24px; color: white; text-align: center; padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="dashboard">
+    <header>
+        <div id="ble-icon" title="Tap to Connect">ᛒ</div>
+        <div class="title">D-Tracker S3 Smart Dash</div>
+    </header>
+
+    <div class="rpm-bar">
+        <svg id="rpm-svg" viewBox="0 0 850 480">
+            <path class="rpm-bg" d="M 120 400 L 120 120 Q 120 60 180 60 L 670 60 Q 730 60 730 120 L 730 400" />
+            <path id="rpm-fill" class="rpm-fill" d="M 120 400 L 120 120 Q 120 60 180 60 L 670 60 Q 730 60 730 120 L 730 400" />
+        </svg>
+    </div>
+
+    <div id="sig-l" class="sig">⬅</div>
+    <div id="sig-r" class="sig">➡</div>
+
+    <div class="center-ui">
+        <div class="speed-val" id="speed">0</div>
+        <div class="unit">km/h</div>
+    </div>
+
+    <div class="gear-box"><div class="gear-val" id="gear">N</div></div>
+
+    <div class="icons-bar">
+        <div id="beam">🔆</div>
+        <div id="stand">⚠</div>
+        <div id="fan">❄</div>
+    </div>
+
+    <div class="bottom-bar">
+        <div class="stat"><span class="lbl">Engine</span><span id="temp" class="val">--°<span style="font-size: 18px">C</span></span></div>
+        <div class="stat"><span class="lbl">Battery</span><span id="volt" class="val">--.<span style="font-size: 18px">V</span></span></div>
+        <div class="stat trip-reset" id="trip-reset"><span class="lbl">Trip (Tap)</span><span id="trip" class="val">0.0</span></div>
+        <div class="stat"><span class="lbl">Odometer</span><span id="odo" class="val">0000<span style="font-size: 18px"> km</span></span></div>
+    </div>
+</div>
+
+<script>
+    // Bluetooth Config (ESP32-S3 Optimized Code එකට ගැලපෙන සෙටින්ග්ස්)
+    const bleServiceUuid = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+    const bleCharUuid = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+    const bleNameFilter = 'D-Tracker_Smart_Dash'; // Arduino Code එකේ නම
+
+    const bleIcon = document.getElementById('ble-icon');
+    const rpmPath = document.getElementById('rpm-fill');
+    
+    // Trip Reset Logic using local storage
+    let tripOffset = localStorage.getItem('dtrackerTripOffset') ? parseFloat(localStorage.getItem('dtrackerTripOffset')) : 0;
+    
+    document.getElementById('trip-reset').addEventListener('click', () => {
+        let currentOdo = parseFloat(document.getElementById('odo').innerText);
+        if(!isNaN(currentOdo)) {
+            tripOffset = currentOdo;
+            localStorage.setItem('dtrackerTripOffset', tripOffset);
+            alert("Trip Meter Reset!");
+        }
+    });
+
+    // Bluetooth Connection Logic
+    bleIcon.addEventListener('click', async () => {
+        if(navigator.bluetooth && !bleIcon.classList.contains('connected')) {
+            try {
+                bleIcon.className = ''; // Reset state
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: bleNameFilter }],
+                    optionalServices: [bleServiceUuid]
+                });
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(bleServiceUuid);
+                const characteristic = await service.getCharacteristic(bleCharUuid);
+                
+                await characteristic.startNotifications();
+                bleIcon.classList.add('connected');
+                
+                characteristic.addEventListener('characteristicvaluechanged', (event) => {
+                    const value = new TextDecoder().decode(event.target.value);
+                    const d = value.split(','); // RPM,Speed,Temp,Volt,ODO,Neutral,Beam,Stand,Left,Right
+
+                    if(d.length >= 10) {
+                        // 1. Center UI
+                        document.getElementById('speed').innerText = Math.round(d[1]);
+                        document.getElementById('gear').innerText = (d[5] == "1") ? "N" : "D";
+
+                        // 2. RPM Bar (Max 12000 for D-Tracker/Ninja)
+                        let rpm = parseInt(d[0]);
+                        let pct = Math.min(rpm / 12000, 1);
+                        rpmPath.style.strokeDashoffset = 1000 - (pct * 1000);
+                        rpmPath.style.stroke = (rpm > 10000) ? "var(--danger)" : "var(--primary)";
+                        rpmPath.style.filter = (rpm > 10000) ? "drop-shadow(0 0 12px var(--danger))" : "drop-shadow(0 0 8px var(--primary))";
+
+                        // 3. Central Icons
+                        document.getElementById('beam').className = (d[6] == "1") ? "active-beam" : "";
+                        document.getElementById('stand').className = (d[7] == "1") ? "active-stand" : "";
+                        
+                        // 4. Split Signals
+                        document.getElementById('sig-l').className = (d[8] == "1") ? "sig sig-on" : "sig";
+                        document.getElementById('sig-r').className = (d[9] == "1") ? "sig sig-on" : "sig";
+
+                        // 5. Bottom Stats
+                        let tempVal = parseFloat(d[2]);
+                        document.getElementById('temp').innerText = tempVal.toFixed(0) + "°";
+                        document.getElementById('fan').className = (tempVal > 95) ? "active-fan" : ""; // Auto Fan Icon
+
+                        document.getElementById('volt').innerText = parseFloat(d[3]).toFixed(1) + ".";
+                        
+                        let currentOdo = parseFloat(d[4]);
+                        document.getElementById('odo').innerText = currentOdo.toFixed(0) + "";
+                        document.getElementById('trip').innerText = (currentOdo - tripOffset).toFixed(1);
+                    }
+                });
+            } catch (e) { 
+                console.log(e); 
+                bleIcon.className = 'error'; 
+            }
+        }
+    });
+</script>
+
+</body>
+</html>
